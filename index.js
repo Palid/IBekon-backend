@@ -227,8 +227,8 @@ server.on('error', function(err) {
 
 
 var client = net.connect({
-  port: 8069,
-  host: 'localhost',
+  port: config.port,
+  host: config.host,
   allowHalfOpen: false
 }, function() {
   console.log("user connected");
@@ -259,8 +259,8 @@ client.on('data', function(data) {
 
 
 var client2 = net.connect({
-  port: 8069,
-  host: 'localhost',
+  port: config.port,
+  host: config.host,
   allowHalfOpen: false
 }, function() {
   console.log("user connected");
