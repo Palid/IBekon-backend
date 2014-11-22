@@ -121,6 +121,8 @@ function syncGame(game) {
           }
         });
       });
+    } else {
+      result[key] = item;
     }
   });
   game.players.forEach(function(player) {
@@ -250,56 +252,39 @@ var server = net.createServer(config, function(socket) {
                     game.players.forEach(function(item) {
                       item.socket.write(getSingleRequest(returnGameUsers(gameId, item.socket.command)));
                     });
-
                   } else {
                     socket.write(errorBuilder("JOIN", "Maximum players amount exceeded."));
                   }
-                  // DELETE ME LATER
-                  if (game.players.length === 2) {
-                    game = currentGames[socket.game.gameId];
-                    if (socket.user.userId === currentGames[socket.game.gameId].host) {
-                      // if (_.every(game.players, 'ready')) {
-                      if (true) {
-                        game.state = 'started';
-                        // Setup game progress
-                        game.progress = startGame(game);
-                        syncGame(game);
-                        /**
-                         * Setup game interval
-                         * @return {[type]} [description]
-                         */
-                        game.sys.scoreInterval = setInterval(function() {
-                          game.progress.beacons.forEach(function(beacon) {
-                            if (beacon.owner !== 'neutral') {
-                              _.where(game.progress.players, {
-                                userId: beacon.owner
-                              }).forEach(function(user) {
-                                user.score = game.settings.pointsPerTick + user.score;
-                              });
-                            }
+                } else if (game.state === "started") {
+                  game.players.push({
+                    socket: socket,
+                    userId: socket.user.userId
+                  });
+                  socket.game = game;
+                  currentGames[gameId] = game;
+                    syncGame(game);
+                    game.sys.scoreInterval = setInterval(function() {
+                      game.progress.beacons.forEach(function(beacon) {
+                        if (beacon.owner !== 'neutral') {
+                          _.where(game.progress.players, {userId: beacon.owner}).forEach(function(user){
+                            user.score = game.settings.pointsPerTick + user.score;
                           });
-                        }, 333);
-                        game.sys.syncInterval = setInterval(function() {
-                          syncGame(game);
-                          if (((Date.now() - game.progress.gameStartTime) > game.progress.gameLength) || _.find(game.progress.players), function(player) {
-                              return player.score >= game.settings.victoryPoints;
-                            }) {
-                            clearInterval(game.sys.syncInterval);
-                          }
-                        }, 1000);
-                      } else {
-                        socket.write(errorBuilder("GAME", _.countBy(game.players, function(player) {
-                          return player.ready;
-                        }).false + " player(s) aren't ready yet."));
+                        }
+                      });
+                    }, 333);
+                    game.sys.syncInterval = setInterval(function() {
+                      syncGame(game);
+                      if (((Date.now() - game.progress.gameStartTime) > game.progress.gameLength) || _.find(game.progress.players), function(player){
+                        return player.score >= game.settings.victoryPoints;
+                      }) {
+                        clearInterval(game.sys.syncInterval);
                       }
-                    } else {
-                      socket.write(errorBuilder("GAME", "You're not the host!"));
-                    }
-                  }
-                  // DELETE ME LATER
-                } else {
+                    }, 1000);
+                  }/**else {
                   socket.write(errorBuilder("JOIN", "Game already started or finished"));
-                }
+                }**/
+                // Bo temporal nie umie.
+                // FIXME
               } else {
                 socket.write(errorBuilder("JOIN", "Game not found."));
               }
@@ -332,9 +317,11 @@ var server = net.createServer(config, function(socket) {
                     } else {
                       socket.write(errorBuilder("LOBBY_UPDATE", "You're not in the game " + gameId));
                     }
-                  } else {
+                  }/**else {
                     socket.write(errorBuilder("LOBBY_UPDATE", "Game already started or finished."));
-                  }
+                  } **/
+                  //Bo temporal nie umie
+                  // FIXME
                 } else {
                   socket.write(errorBuilder("LOBBY_UPDATE", "Game not found!"));
                 }
@@ -344,34 +331,37 @@ var server = net.createServer(config, function(socket) {
               if (socket.user && socket.user.userId) {
                 game = currentGames[socket.game.gameId];
                 if (socket.user.userId === currentGames[socket.game.gameId].host) {
-                  if (_.every(game.players, 'ready')) {
+                  // FIX LATER;
+                  // if (_.every(game.players, 'ready')) {
+                  if (true){
                     game.state = 'started';
                     // Setup game progress
                     game.progress = startGame(game);
-                    game.players.forEach(function(item) {
-                      item.socket.write(getSingleRequest(returnGameUsers(gameId, item.socket.command)));
-                    });
+                    // syncGame(game);
+                    // game.players.forEach(function(item) {
+                    //   item.socket.write(getSingleRequest(returnGameUsers(gameId, item.socket.command)));
+                    // });
                     /**
                      * Setup game interval
                      * @return {[type]} [description]
                      */
-                    game.sys.scoreInterval = setInterval(function() {
-                      game.progress.beacons.forEach(function(beacon) {
-                        if (beacon.owner !== 'neutral') {
-                          _.where(game.progress.players, {userId: beacon.owner}).forEach(function(user){
-                            user.score = game.settings.pointsPerTick + user.score;
-                          });
-                        }
-                      });
-                    }, 333);
-                    game.sys.syncInterval = setInterval(function() {
-                      syncGame(game);
-                      if (((Date.now() - game.progress.gameStartTime) > game.progress.gameLength) || _.find(game.progress.players), function(player){
-                        return player.score >= game.settings.victoryPoints;
-                      }) {
-                        clearInterval(game.sys.syncInterval);
-                      }
-                    }, 1000);
+                    // game.sys.scoreInterval = setInterval(function() {
+                    //   game.progress.beacons.forEach(function(beacon) {
+                    //     if (beacon.owner !== 'neutral') {
+                    //       _.where(game.progress.players, {userId: beacon.owner}).forEach(function(user){
+                    //         user.score = game.settings.pointsPerTick + user.score;
+                    //       });
+                    //     }
+                    //   });
+                    // }, 333);
+                    // game.sys.syncInterval = setInterval(function() {
+                    //   syncGame(game);
+                    //   if (((Date.now() - game.progress.gameStartTime) > game.progress.gameLength) || _.find(game.progress.players), function(player){
+                    //     return player.score >= game.settings.victoryPoints;
+                    //   }) {
+                    //     clearInterval(game.sys.syncInterval);
+                    //   }
+                    // }, 1000);
                   } else {
                     socket.write(errorBuilder("GAME", _.countBy(game.players, function(player) {
                       return player.ready;
@@ -394,7 +384,7 @@ var server = net.createServer(config, function(socket) {
                 game = currentGames[socket.game.gameId];
                 if (parsed.request.beaconId) {
                   var currentBeacon = _.find(game.progress.beacons, parsed.request.beaconId);
-                  if (currentBeacon.owner !== socket.user.userId) {
+                  if (currentBeacon && currentBeacon.owner !== socket.user.userId) {
                     if (currentBeacon.system.captureInterval) {
                       clearInterval(currentBeacon.system.captureInterval);
                       currentBeacon.currentCapturingTime = 0;
