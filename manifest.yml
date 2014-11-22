@@ -1,0 +1,7 @@
+---
+# IBekon manifest for IBM Bluemix
+applications:
+- name: IBekon - Hide and seek
+memory: 512M
+host: IBekon
+command: node index.js
