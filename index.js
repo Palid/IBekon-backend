@@ -19,9 +19,76 @@ shortID.configure({
 // CONST
 var currentGames = {};
 
+function getSingleRequest(obj) {
+  return JSON.stringify(obj) + '\n\r';
+}
+
+function errorBuilder(command, description) {
+  return getSingleRequest({
+    status: "ERR",
+    description: description,
+    command: command,
+    date: Date.now()
+  });
+}
+
+function startGame(Game) {
+  var gameProgress = {
+    beacons: _.map(Game.beacons, function(beacon) {
+      return {
+        // name: '',
+        beaconId: beacon.beaconId,
+        state: 'captured',
+        owner: 'neutral',
+        currentCapturingTime: 0,
+        movementLockTime: 0,
+        stats: {
+          capturingTimeTotal: 0,
+          captureTriesTotal: 0,
+          longestInHold: {
+            by: 'neutral',
+            time: 0
+          },
+          firstCapturedBy: undefined
+        }
+      };
+    }),
+    players: _.map(Game.players, function(player) {
+      return {
+        userId: player.userId,
+        score: 0,
+        stats: {
+          timeSpentOnCaptures: 0,
+          totalCaptureTries: 0,
+          succeededCaptures: 0,
+          failedCaptures: 0
+        },
+        lastSyncDate: Date.now()
+      };
+    }),
+    gameStartTime: Date.now(),
+    gameLength: Game.settings.gameTime > 20 ? 6000 * 20 : Game.settings.gameTime
+  };
+  console.log(Game);
+
+  var progress = {
+    interval: setInterval(function() {
+      // console.log("POTATO");
+      // console.log(Game);
+      Game.players.forEach(function(player) {
+        player.socket.write(getSingleRequest({
+        }));
+      });
+      clearInterval(progress.interval);
+    }, 1000)
+
+  };
+  return gameProgress;
+}
 
 function newGame(userId) {
   var game = {
+    // UNCOMMENT LATER
     // gameId: shortID.generate(),
     gameId: '1234',
     settings: {
@@ -40,42 +107,28 @@ function newGame(userId) {
   return game;
 }
 
-function getSingleRequest(obj) {
-  return JSON.stringify(obj) + '\n\r';
-}
 
-function commonResponse(status, obj) {
-  var response = {
-    status: status
-  };
-  return getSingleRequest(_.extend(response, obj));
-}
-
-function errorBuilder(command, description) {
-  return getSingleRequest({
-    status: "ERR",
-    description: description,
-    command: command,
-    date: Date.now()
-  });
-}
-
-function returnGameUsers(gameId) {
+function returnGameUsers(gameId, command) {
   var game = currentGames[gameId];
-  game.status = "OK";
-  game.date = Date.now();
-  return _.transform(game, function(result, item, key) {
-    if (key === 'players') {
-      result.players = _.map(game.players, function(item) {
-        return {
-          userId: item.socket.user.userId,
-          ready: item.socket.user.ready
-        };
-      });
-    } else {
-      result[key] = item;
-    }
-  });
+  var gameUsers = {
+    response: _.extend(_.transform(game, function(result, item, key) {
+      if (key === 'players' || key === "progress") {
+        result.players = _.map(game.players, function(item) {
+          return {
+            userId: item.socket.user.userId,
+            ready: item.socket.user.ready
+          };
+        });
+      } else {
+        result[key] = item;
+      }
+    }), {
+      date: Date.now()
+    }),
+    command: command,
+    status: "OK"
+  };
+  return gameUsers;
 }
 
 /**
@@ -103,120 +156,132 @@ var server = net.createServer(config, function(socket) {
           return;
         }
       }
-      switch (parsed.command) {
-        case "CONNECT":
-          if (parsed.request && parsed.request.userId) {
-            socket.user = {
-              userId: parsed.request.userId
-            };
-            socket.write(commonResponse("OK"));
-          } else {
-            socket.write(commonResponse("ERR"));
-          }
-          break;
-        case "HOST":
-          socket.game = newGame(socket.user.userId);
-          gameId = socket.game.gameId;
-          socket.game.players.push({
-            socket: socket
-          });
-          currentGames[gameId] = socket.game;
-          socket.write(getSingleRequest(returnGameUsers(gameId)));
-          break;
-        case "JOIN":
-        if (parsed && parsed.request && parsed.request.gameId) {
-          gameId = parsed.request.gameId;
-          game = currentGames[gameId];
-          if (game) {
-            if (game.state === "lobby") {
-              if (game.settings.maxPlayers > game.players.length) {
-                game.players.push({
-                  socket: socket
-                });
-                socket.game = game;
-                currentGames[gameId] = game;
-                game.players.forEach(function(item) {
-                  item.socket.write(getSingleRequest(returnGameUsers(gameId)));
-                });
-              } else {
-                socket.write(errorBuilder("JOIN", "Maximum players amount exceeded."));
-              }
+      if (parsed && parsed.request) {
+        switch (parsed.command) {
+          case "CONNECT":
+            if (parsed.request && parsed.request.userId) {
+              socket.user = {
+                userId: parsed.request.userId
+              };
+              socket.write(getSingleRequest({
+                status: "OK",
+                date: Date.now()
+              }));
             } else {
-              socket.write(errorBuilder("JOIN", "Game already started or finished"));
+              socket.write(errorBuilder("CONNECT", "No userID provided."));
             }
-          } else {
-            socket.write(errorBuilder("JOIN", "Game not found."));
-          }
-        } else {
-          socket.write(errorBuilder("JOIN", "Wrong request!"));
-        }
-          break;
-        case "LOBBY_UPDATE":
-          if (parsed && parsed.request && parsed.request.gameId) {
-              gameId = parsed.request.gameId;
-              game = currentGames[gameId];
-              if (game.state === "lobby") {
-                var playerIndex = _.findIndex(game.players, {
-                  userId: parsed.request.userId
-                });
-                if (playerIndex !== -1) {
-                  if (parsed.request.userId === currentGames[gameId].host) {
-                    // Retarded 'anticheat'.
-                    var clearObj = _.transform(currentGames[gameId], function(result, item, key) {
-                      if (key !== "players" || key !== "host" || key !== "state") {
-                        result[key] = item;
-                      }
-                    });
-                    _.extend(clearObj, parsed.request);
-                  }
-                  if (!_.isUndefined(parsed.request.ready)) {
-                    game.players[playerIndex].socket.user.ready = parsed.request.ready;
-                  }
-                  game.players.forEach(function(item) {
-                    item.socket.write(getSingleRequest(returnGameUsers(gameId)));
-                  });
-                } else {
-                  socket.write(errorBuilder("LOBBY_UPDATE", "You're not in the game " + gameId));
-                }
-              } else {
-                socket.write(errorBuilder("LOBBY_UPDATE", "Game already started or finished."));
-              }
-          } else {
-            socket.write(errorBuilder("LOBBY_UPDATE", "Wrong request!"));
-          }
-          break;
-        case "GAME":
-          if (parsed && parsed.request && parsed.request.gameId) {
+            break;
+          case "HOST":
+            socket.game = newGame(socket.user.userId);
+            gameId = socket.game.gameId;
+            socket.game.players.push({
+              socket: socket,
+              userId: socket.user.userId
+            });
+            currentGames[gameId] = socket.game;
+            socket.write(getSingleRequest(returnGameUsers(gameId, parsed.command)));
+            break;
+          case "JOIN":
+            // Get parsed gameID
             gameId = parsed.request.gameId;
             game = currentGames[gameId];
-            if (parsed.request.userId === currentGames[gameId].host) {
-              if (_.every(game.players, 'ready')) {
-              currentGames[gameId].state = 'started';
+            if (game) {
+              if (game.state === "lobby") {
+                if (game.settings.maxPlayers > game.players.length) {
+                  game.players.push({
+                    socket: socket,
+                    userId: socket.user.userId
+                  });
+                  socket.game = game;
+                  currentGames[gameId] = game;
+                  game.players.forEach(function(item) {
+                    item.socket.write(getSingleRequest(returnGameUsers(gameId, parsed.command)));
+                  });
+                } else {
+                  socket.write(errorBuilder("JOIN", "Maximum players amount exceeded."));
+                }
+              } else {
+                socket.write(errorBuilder("JOIN", "Game already started or finished"));
+              }
+            } else {
+              socket.write(errorBuilder("JOIN", "Game not found."));
+            }
+            break;
+          case "LOBBY_UPDATE":
+            gameId = socket.game.gameId;
+            game = currentGames[gameId];
+            if (game.state === "lobby") {
+              var playerIndex = _.findIndex(game.players, {
+                userId: socket.user.userId
+              });
+              if (playerIndex !== -1) {
+                if (socket.user.userId === currentGames[gameId].host) {
+                  // Retarded 'anticheat'.
+                  var clearObj = _.transform(currentGames[gameId], function(result, item, key) {
+                    if (key !== "players" || key !== "host" || key !== "state") {
+                      result[key] = item;
+                    }
+                  });
+                  currentGames[gameId] = _.extend(clearObj, parsed.request);
+                }
+                if (!_.isUndefined(parsed.request.ready)) {
+                  game.players[playerIndex].ready = parsed.request.ready;
+                }
                 game.players.forEach(function(item) {
-                  item.socket.write(getSingleRequest(returnGameUsers(gameId)));
+                  item.socket.write(getSingleRequest(returnGameUsers(gameId, parsed.command)));
                 });
               } else {
-                socket.write(errorBuilder("GAME",  _.countBy(game.players, function(player){
+                socket.write(errorBuilder("LOBBY_UPDATE", "You're not in the game " + gameId));
+              }
+            } else {
+              socket.write(errorBuilder("LOBBY_UPDATE", "Game already started or finished."));
+            }
+            break;
+          case "GAME":
+            gameId = socket.game.gameId;
+            game = currentGames[gameId];
+            if (socket.user.userId === currentGames[gameId].host) {
+              if (_.every(game.players, 'ready')) {
+                currentGames[gameId].state = 'started';
+                // Setup game progress
+                game.progress = startGame(game);
+                game.players.forEach(function(item) {
+                  item.socket.write(getSingleRequest(returnGameUsers(gameId, parsed.command)));
+                });
+              } else {
+                socket.write(errorBuilder("GAME", _.countBy(game.players, function(player) {
                   return player.ready;
-                })  + " player(s) aren't ready yet."));
+                }).false + " player(s) aren't ready yet."));
               }
             } else {
               socket.write(errorBuilder("GAME", "You're not the host!"));
             }
-          } else {
-            socket.write(errorBuilder("GAME", "Wrong request!"));
-          }
-          break;
-        case "CAPTURE":
-          break;
-        case "IN_CAPTURE":
-          break;
+            break;
+          case "SYNC":
+            gameId = socket.game.gameId;
+            game = currentGames[gameId];
+            // if (parsed.request.beacon) {
+              console.log(game);
+            // }
+            break;
+          case "CAPTURE":
+            break;
+          case "CAPTURED":
+            break;
+          case "CAPTURE_FAIL":
+            break;
+          case "END":
+            break;
+        }
+      } else {
+        var cmd = parsed && parsed.command ? parsed.command : "UNDEFINED";
+        socket.write(errorBuilder(cmd, "Wrong request!"));
       }
     });
   });
 });
 
-server.listen(8069);
+server.listen(config.port);
 
 server.on('error', function(err) {
   if (err.code === "EADDRINUSE") {
@@ -225,96 +290,4 @@ server.on('error', function(err) {
   }
 });
 
-
-var client = net.connect({
-  port: config.port,
-  host: config.host,
-  allowHalfOpen: false
-}, function() {
-  console.log("user connected");
-});
-
-client.setEncoding('utf8');
-client.write(getSingleRequest({
-  command: "CONNECT",
-  request: {
-    userId: shortID.generate()
-  }
-}));
-
-
-client.write(getSingleRequest({
-  "command": "HOST",
-  "request": {
-    userId: shortID.generate()
-  }
-}));
-
-
-client.on('data', function(data) {
-  console.log("Client 1");
-  console.log(data);
-  console.log("End of client 1");
-});
-
-
-var client2 = net.connect({
-  port: config.port,
-  host: config.host,
-  allowHalfOpen: false
-}, function() {
-  console.log("user connected");
-});
-
-client2.setEncoding('utf8');
-
-client2.write(getSingleRequest({
-  command: "CONNECT",
-  request: {
-    userId: shortID.generate()
-  }
-}));
-
-client2.write(getSingleRequest({
-  "command": "JOIN",
-  "request": {
-    "gameId": '1234'
-  }
-}));
-
-client2.on('data', function(data) {
-  console.log("CLIENT 2");
-  console.log(data);
-  console.log("END OF CLIENT 2");
-});
-
-
-client2.write(getSingleRequest({
-  command: "LOBBY_UPDATE",
-  request: {
-    gameId: '1234',
-    ready: false
-  }
-}));
-
-setTimeout(function(){
-  client2.write(getSingleRequest({
-    command: "LOBBY_UPDATE",
-    request: {
-      gameId: '1234',
-      ready: false
-    }
-  }));
-
-}, 20);
-
-setTimeout(function(){
-  client2.write(getSingleRequest({
-    command: "LOBBY_UPDATE",
-    request: {
-      gameId: '1234',
-      ready: false
-    }
-  }));
-
-}, 30);
+// require('./_tests_.js');
