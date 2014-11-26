@@ -16,7 +16,8 @@
     "gulp-jshint": "^1.9.0",
     "gulp-nodemon": "^1.0.4",
     "jest-cli": "^0.1.18",
-    "jshint-stylish": "^1.0.0"
+    "jshint-stylish": "^1.0.0",
+    "mitm": "^1.0.2"
   },
   "scripts": {
     "test": "jest",
