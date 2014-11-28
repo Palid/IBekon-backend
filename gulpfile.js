@@ -6,6 +6,7 @@ var stylish = require('jshint-stylish');
 var flowtype = require('gulp-flowtype');
 var jest = require('gulp-jest');
 var nodemon = require('gulp-nodemon');
+var jsdoc = require("gulp-jsdoc");
 
 var DIR = './lib/**/*.js';
 
@@ -25,6 +26,23 @@ var JEST_OPTIONS = {
     "react"
   ]
 };
+
+
+
+gulp.task('docs', function() {
+  return gulp.src(DIR)
+    .pipe(jsdoc('./docs', {
+    path            : "ink-docstrap",
+    systemName      : "IBekon",
+    // footer          : "IBekon",
+    // copyright       : "IBekon",
+    navType         : "vertical",
+    theme           : "cerulean",
+    linenums        : true,
+    collapseSymbols : false,
+    inverseNav      : false
+  }));
+});
 
 gulp.task('lint', function() {
   return gulp.src(DIR)
@@ -46,7 +64,8 @@ gulp.task('watch', function() {
   gulp.watch(DIR, [
     // 'typecheck',
     'lint',
-    'tests'
+    'tests',
+    'docs'
     ]);
 });
 // define tasks here
@@ -54,5 +73,6 @@ gulp.task('default', [
   // 'typecheck',
   'lint',
   'tests',
+  'docs',
   'watch'
 ]);
