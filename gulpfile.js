@@ -2,24 +2,15 @@
 var gulp = require('gulp');
 
 var jshint = require('gulp-jshint');
-var stylish = require('jshint-stylish');
 var flowtype = require('gulp-flowtype');
-var jest = require('gulp-jest');
-var nodemon = require('gulp-nodemon');
+var jestRunner = require('gulp-jest');
 var jsdoc = require("./jsdoc-runner");
 
 var DIR = './lib/**/*.js';
 
 var JEST_OPTIONS = {
-  scriptPreprocessor: "./spec/support/preprocessor.js",
-  unmockedModulePathPatterns: [
-    "node_modules/react"
-  ],
+  collectCoverage: true,
   testDirectoryName: "__tests__",
-  testPathIgnorePatterns: [
-    "node_modules",
-    "spec/support"
-  ],
   moduleFileExtensions: [
     "js",
     "json",
@@ -49,7 +40,7 @@ gulp.task('typecheck', function () {
 
 gulp.task('tests', function () {
   return gulp.src('./lib/')
-    .pipe(jest());
+    .pipe(jestRunner(JEST_OPTIONS));
 });
 
 gulp.task('watch', function () {
