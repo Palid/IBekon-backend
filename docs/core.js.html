@@ -87,11 +87,15 @@ var Game = require('./game.js');
  * @property {boolean} ready Player's ready status (each player has to be ready before game gets started)
  */
 
-function sendAndLog(socket, request) {
-  coreLogger.log('info', request);
-  socket.write(request);
-}
 
+/**
+ * Overwriting socket prototype write to explicitely log all communications
+ */
+var oldProto = net.Socket.prototype.write;
+net.Socket.prototype.write = function(data, encoding, callback) {
+  coreLogger.log('info', data);
+  oldProto.call(this, data, encoding, callback);
+};
 
 /**
  * Returns an object with all game data for client
@@ -139,7 +143,7 @@ function sendWrongRequestError(socket) {
 }
 
 function updateAllPlayers(socket) {
-  var i, response, dataForPlayer = returnGameData(socket.game.gameId);
+  var i, response, dataForPlayer = returnGameData(socket.game);
   dataForPlayer.command = socket.command;
   dataForPlayer.status = "OK";
   response = requestUtil.build(dataForPlayer);
@@ -148,21 +152,36 @@ function updateAllPlayers(socket) {
   }
 }
 
+/**
+ * Extends gameObject by settings
+ * @param {object} socket  Socket object
+ * @param {object} request Config object (request)
+ */
+function setSettings(socket, request) {
+  if (request.settings) {
+    _.extend(socket.game.settings, _.transform(request.settings, function(result, item, key) {
+      if (config.gameDefaults[key]) result[key] = item;
+    }));
+    console.log(socket.game.settings);
+  } else {
+    socket.game.settings = config.gameDefaults;
+  }
+}
+
+/**
+ * Updates game's settings and writes updated data to each player/client
+ * @param  {object} socket Socket object
+ * @param  {object} parsed Object with parsed data (client's 'request' object)
+ */
 function updateGameSettings(socket, parsed) {
   var playerIndex = _.findIndex(socket.game.players, {
     userId: socket.user.userId
   });
   if (playerIndex !== -1) {
     if (socket.user.userId === socket.game.host) {
-      // Retarded 'anticheat'.
-      var clearObj = _.transform(socket.game, function(result, item, key) {
-        if (key !== "players" || key !== "host" || key !== "state") {
-          result[key] = item;
-        }
-      });
-      socket.game = _.extend(clearObj, parsed.request);
+      setSettings(socket, parsed.request);
     }
-    if (!_.isUndefined(parsed.request.ready)) {
+    if (_.isBoolean(parsed.request.ready)) {
       socket.game.players[playerIndex].ready = parsed.request.ready;
     }
     updateAllPlayers(socket);
@@ -171,7 +190,12 @@ function updateGameSettings(socket, parsed) {
   }
 }
 
-function gameLogic(socket, data) {
+/**
+ * Huge parser defining behavior based on sent commands and server-stored data
+ * @param  {object} socket Socket object
+ * @param  {string} data   Any stringified data returned by socket.
+ */
+function gameParser(socket, data) {
   _.forEach(requestUtil.splitter(data), function(item) {
     var parsed = requestUtil.parser(item, coreLogger);
 
@@ -199,15 +223,12 @@ function gameLogic(socket, data) {
         case "HOST":
           if (socket.user &amp;&amp; socket.user.userId) {
             if (!socket.game.host) {
-              socket.game = Game.create(socket.user.userId);
+              socket.game = Game.factory(socket.user.userId);
               socket.game.players.push({
                 socket: socket,
                 userId: socket.user.userId
               });
-              sendAndLog(socket, requestUtil.build(_.extend({
-                command: socket.command,
-                status: "OK"
-              }, returnGameData(socket.game))));
+              updateGameSettings(socket, parsed);
             } else {
               socket.write(requestUtil.error(socket.command, "Game with this userId is already initialied."));
             }
@@ -218,7 +239,7 @@ function gameLogic(socket, data) {
         case "JOIN":
           if (socket.user &amp;&amp; socket.user.userId) {
             // Get parsed gameID
-            socket.game.gameId = parsed.request.gameId;
+            socket.game.gameId = parsed.request ? parsed.request.gameId : null;
             socket.game = Game.get(socket.game.gameId);
             if (socket.game) {
               if (socket.game.host === socket.user.userId) {
@@ -271,7 +292,6 @@ function gameLogic(socket, data) {
               socket.write(requestUtil.error(socket.command, "You're not the host."));
             }
           } else sendWrongRequestError(socket);
-
           break;
         case "CAPTURE":
           if (socket.user &amp;&amp; socket.user.userId) {
@@ -378,7 +398,7 @@ var server = net.createServer(config, function(socket) {
   });
 
   socket.on('data', function(data) {
-    gameLogic(socket, data);
+    gameParser(socket, data);
   });
 });
 
@@ -395,8 +415,6 @@ server.on('error', function(err) {
 });
 
 // require('./my-test.js');
-
-module.exports = gameLogic;
 </code></pre>
         </article>
     </section>
@@ -413,7 +431,7 @@ module.exports = gameLogic;
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.3.0-alpha13</a> on Fri Dec 26 2014 21:41:05 GMT+0100 (CET)
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.3.0-alpha13</a> on Sat Dec 27 2014 17:40:11 GMT+0100 (CET)
 </footer>
 
 <script> prettyPrint(); </script>
