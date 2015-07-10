@@ -38,7 +38,7 @@ gulp.task('typecheck', function () {
     .pipe(flowtype());
 });
 
-gulp.task('tests', function () {
+gulp.task('test', function () {
   return gulp.src('./lib/')
     .pipe(jestRunner(JEST_OPTIONS));
 });
@@ -55,7 +55,7 @@ gulp.task('watch', function () {
 gulp.task('default', [
   // 'typecheck',
   'lint',
-  'tests',
+  'test',
   'docs',
   'watch'
 ]);
