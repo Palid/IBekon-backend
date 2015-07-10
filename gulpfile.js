@@ -2,8 +2,8 @@
 var gulp = require('gulp');
 
 var jshint = require('gulp-jshint');
-var flowtype = require('gulp-flowtype');
-var jestRunner = require('gulp-jest');
+// var flowtype = require('gulp-flowtype');
+var jestRunner = require('gulp-jest-iojs');
 var jsdoc = require("./jsdoc-runner");
 
 var DIR = './lib/**/*.js';
