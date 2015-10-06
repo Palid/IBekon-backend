@@ -1,9 +1,8 @@
 "use strict";
 var gulp = require('gulp');
 
-var jshint = require('gulp-jshint');
-// var flowtype = require('gulp-flowtype');
-var jestRunner = require('gulp-jest-iojs');
+var eslint = require('gulp-eslint');
+var jest = require('gulp-jest-iojs');
 var jsdoc = require("./jsdoc-runner");
 
 var DIR = './lib/**/*.js';
@@ -14,7 +13,16 @@ var JEST_OPTIONS = {
   moduleFileExtensions: [
     "js",
     "json",
-    "react"
+    "react",
+    "es6"
+  ],
+  "scriptPreprocessor": "<rootDir>/node_modules/babel-jest",
+  "testFileExtensions": ["es6", "js"],
+  "unmockedModulePathPatterns": [
+    'lodash',
+    'supermixer',
+    'stampit',
+    'bluebird'
   ]
 };
 
@@ -29,23 +37,16 @@ gulp.task('docs', function () {
 
 gulp.task('lint', function () {
   return gulp.src(DIR)
-    .pipe(jshint('.jshintrc'))
-    .pipe(jshint.reporter('jshint-stylish'));
-});
-
-gulp.task('typecheck', function () {
-  return gulp.src(DIR)
-    .pipe(flowtype());
+    .pipe(eslint.format());
 });
 
 gulp.task('test', function () {
   return gulp.src('./lib/')
-    .pipe(jestRunner(JEST_OPTIONS));
+    .pipe(jest(JEST_OPTIONS));
 });
 
 gulp.task('watch', function () {
   gulp.watch(DIR, [
-    // 'typecheck',
     'lint',
     'tests',
     'docs'
@@ -53,7 +54,6 @@ gulp.task('watch', function () {
 });
 // define tasks here
 gulp.task('default', [
-  // 'typecheck',
   'lint',
   'test',
   'docs',
